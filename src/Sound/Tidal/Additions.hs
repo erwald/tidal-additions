@@ -7,6 +7,7 @@ module Sound.Tidal.Additions
 , toBass
 , withBass
 , select
+, BrokenChord (..)
 , arp
 ) where
 
@@ -76,28 +77,55 @@ Same as @toBass@, but superimposes the base over the given pattern.
 withBass :: Num a => Rational -> Pattern a -> Pattern a
 withBass = superimpose . toBass
 
+{-|
+Takes a pattern of harmonies (chords), @harmonyP@, and a pattern of indices
+(selections), @selectP@, and returns picking notes from the harmony using the
+indices. Keeps the structure of the latter pattern.
+-}
 select :: Parseable a => Num a => Pattern a -> Pattern Int -> Pattern a
-select harmonyP selectP = (\idx xs -> xs !!! idx + 12 * octave idx xs) <$> selectP <*> groupByTime' harmonyP
+select harmonyP selectP = selectNote <$> selectP <*> groupByTime' harmonyP
   where octave idx xs = fromIntegral $ idx `div` length xs
+        selectNote idx xs = xs !!! idx + 12 * octave idx xs
 
+{-|
+"Unflattens" a pattern @p@, taking all events occurring at the same time and
+grouping them into lists.
+-}
 groupByTime' :: Pattern a -> Pattern [a]
 groupByTime' p = Pattern $ \(s, e) -> groupByTime $ segment' $ arc p (s, e)
 
-arp :: Num a => Time -> [Int] -> [[a]] -> Pattern a -> Pattern Int -> Pattern a
-arp noteDur arp chords = arpenchord noteDur expandedChords
-  where expandedChords = map (expandChord arp) chords
+{-|
+Represents the type of a broken chord (sometimes mistakenly referred to as an
+arpeggio).
+-}
+data BrokenChord
+  = Up Int
+  | Down Int
+  | UpDown Int
+  | DownUp Int
+  | Custom [Int]
 
-expandChord :: Num a => [Int] -> [a] -> [a]
-expandChord selections chord = map select selections
-  where notesInChord = length chord
-        octave idx = fromIntegral $ idx `div` notesInChord
-        select idx = chord !!! idx + octave idx * 7
+{-|
+Arpeggiates over a given harmony, @harmonyP@, according to a given "strategy"
+@brokenChord@.
+-}
+arp :: (Num a, Parseable a) => Pattern a -> Ratio Integer -> BrokenChord -> Pattern a
+arp harmonyP noteDuration brokenChord = select harmonyP arpP
+  where speedUpFactor = 1 / noteDuration / brokenChordLength brokenChord
+        arpP = fast (pure speedUpFactor) $ brokenChordToPattern brokenChord
 
-arpenchord :: Num a => Time -> [[a]] -> Pattern a -> Pattern Int -> Pattern a
-arpenchord noteDur chords transP chordP = flatpat' noteDur $ Chords.chordate chords <$> transP <*> chordP
+brokenChordToPattern :: (Enum a, Num a) => BrokenChord -> Pattern a
+brokenChordToPattern brokenChord =
+  case brokenChord of Up n -> run $ fromIntegral n
+                      Down n -> rev $ run $ fromIntegral n
+                      UpDown n -> run (fromIntegral $ div n 2) `append` ((+ 1) <$> rev $ run $ fromIntegral $ div n 2)
+                      DownUp n -> ((+ 1) <$> rev $ run $ fromIntegral $ div n 2) `append` run (fromIntegral $ div n 2)
+                      Custom ns -> listToPat $ map fromIntegral ns
 
-flatpat' :: Num a => Time -> Pattern [a] -> Pattern a
-flatpat' noteDur p = stack [rotR (noteDur * fromIntegral i) $ unMaybe $ fmap (`maybeInd` i) p | i <- [0..24]]
-  where maybeInd xs i | i < length xs = Just $ xs !!! i
-                      | otherwise = Nothing
-        unMaybe = (fromJust <$>) . filterValues isJust
+brokenChordLength :: Num a => BrokenChord -> a
+brokenChordLength brokenChord = fromIntegral $
+  case brokenChord of Up n -> n
+                      Down n -> n
+                      UpDown n -> n
+                      DownUp n -> n
+                      Custom ns -> length ns
