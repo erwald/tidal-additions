@@ -1,0 +1,26 @@
+name:                tidal-additions
+version:             0.1.0.0
+-- synopsis:
+-- description:
+homepage:            https://github.com/erwald/tidal-additions#readme
+license:             BSD3
+license-file:        LICENSE
+author:              Erich Grunewald
+maintainer:          erichgrunewald@gmail.com
+copyright:           2017 Erich Grunewald
+category:            Web
+build-type:          Simple
+extra-source-files:  README.md
+cabal-version:       >=1.10
+
+library
+  hs-source-dirs:      src
+  exposed-modules:     Sound.Tidal.Additions
+  build-depends:       base >= 4.7 && < 5,
+                       tidal
+  default-language:    Haskell2010
+  default-extensions:  OverloadedStrings
+
+source-repository head
+  type:     git
+  location: https://github.com/erwald/tidal-additions
