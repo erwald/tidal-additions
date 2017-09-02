@@ -16,6 +16,19 @@ import Sound.Tidal.Utils
 import qualified Sound.Tidal.Chords as Chords
 import qualified Sound.Tidal.Scales as Scales
 
+{- |
+@toScale@ lets you turn a pattern of notes within a scale (expressed as a list)
+to note numbers. For example `toScale [0, 4, 7] 0 "0 1 2 3"` will turn into the
+pattern `"0 4 7 12"`. This assumes your scale fits within an octave.
+
+The second argument, @transposition@, allows you to transpose the notes _after_
+they have been converted into the given scale.
+-}
+inScale :: [Int] -> Int -> Pattern Int -> Pattern Int
+inScale scale transposition = fmap noteInScale
+  where octave x = x `div` length scale
+        noteInScale x = (scale !!! x) + 12 * octave x + transposition
+
 {-|
 Gradually and cyclically shifts the phase of a pattern.
 
@@ -30,25 +43,36 @@ phaseShift shifts shiftRepeats = ((slow slowP (run shiftsP) / shiftsP) ~>)
   where shiftsP = return shifts
         slowP = return (shifts * shiftRepeats)
 
-inScale :: [Int] -> Int -> Pattern Int -> Pattern Int
-inScale scale transposition = fmap noteInScale
-  where octave x = x `div` length scale
-        noteInScale x = (scale !!! x) + 12 * octave x + transposition
-
+{-|
+Superimposes a harmony (transposed by the interval @n@) on top of the given
+pattern.
+-}
 harmonized :: Num a => a -> Pattern a -> Pattern a
 harmonized n = superimpose $ fmap (+ n)
 
+{-|
+Returns the given pattern with the sign of its notes changed.
+-}
 inversed :: Num a => Pattern a -> Pattern a
 inversed = fmap (* (-1))
 
+{-|
+Returns the given pattern with its notes transposed by @octaveP@ octaves.
+-}
 octShift :: Num a => Pattern a -> Pattern a -> Pattern a
 octShift octaveP p = (+) <$> p <*> ((* 12) <$> octaveP)
 
+{-|
+Transforms the given pattern into a bassline (reusing some of its notes).
+-}
 toBass :: Num a => Rational -> Pattern a -> Pattern a
 toBass cycles p = fast cyclesP $ stack [rotR (i/cycles) $ octShift (-3) $ zoom (zoomArc i) p | i <- [0..cycles-1]]
   where cyclesP = return cycles
         zoomArc i = (i/cycles, (i/cycles) + 1/4/cycles)
 
+{-|
+Same as @toBass@, but superimposes the base over the given pattern.
+-}
 withBass :: Num a => Rational -> Pattern a -> Pattern a
 withBass = superimpose . toBass
 
